@@ -14,6 +14,7 @@
 TaskHandle_t TaskHandleTemperature;
 TaskHandle_t TaskHandleDepth;
 TaskHandle_t TaskHandleClarity;
+TaskHandle_t TaskHandleDataHandler;
 
 // Queue untuk data sensor
 QueueHandle_t tempSensorQueue;
@@ -28,10 +29,11 @@ SemaphoreHandle_t resourceMutex;
 
 // Informasi koneksi WiFi dan Blynk
 char auth[] = BLYNK_AUTH_TOKEN;
-const char *wifiSSID = "Wokwi-GUEST";
-const char *wifiPass = "";
+const char *wifiSSID = "Apa Aja Boleh";
+const char *wifiPass = "Jojo195$37";
 
-const int TempSensorPin = 18;
+// const int TempSensorPin = 18;
+const int TempSensorPin = 32;
 const int DepthSensorPin = 34;
 const int ClaritySensorPin = 35;
 const int IndicatorLEDPin = 5;
@@ -44,7 +46,6 @@ float waterClarityLevel = 20;
 float maxTemperature = 30.0; // Batas suhu
 int minWaterDepth = 20;      // Batas kedalaman
 float minClarity = 50.0;     // Batas kejernihan
-
 
 // Struktur untuk data sensor
 struct SensorInfo {
@@ -67,7 +68,6 @@ void initializeWiFi() {
   }
   Serial.println("WiFi connected!");
 }
-
 
 // Fungsi untuk mengontrol LED menggunakan tombol di Blynk
 BLYNK_WRITE(V3) {
@@ -102,107 +102,111 @@ BLYNK_WRITE(V6) {
   Serial.println(minClarity);
 }
 
-// Task untuk membaca suhu air
+// Task untuk membaca suhu air. Sensor: DS18b20
 void temperatureTask(void *pvParameters) {
   QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
 
   while (true) {
     tempSensor.requestTemperatures();
-    delay(100);
-    float currentTemperature = tempSensor.getTempCByIndex(0);
+    vTaskDelay(100);
+    float currentTemperature = tempSensor.getTempCByIndex(0); // Temp in Celsius
 
-    SensorInfo data;
-    data.temperature = currentTemperature;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(*queue, &currentTemperature, portMAX_DELAY) != pdPASS) {
       Serial.println("Temperature data queue is full. Skipping...");
     }
 
-    // Cetak ke Serial Monitor
-    Serial.print("Temperature: ");
-    Serial.print(currentTemperature);
-    Serial.println(" °C");
-
-    // Kirim event jika suhu melebihi batas
-    if (currentTemperature > maxTemperature) {
-      Blynk.logEvent("high_temp", "Water temperature is too high!");
-    }
-
-    Blynk.virtualWrite(V0, currentTemperature);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
+// Task untuk mengecek kedalaman air. Sensor: Water Level Sensor
 void depthTask(void *pvParameters) {
   QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
 
   while (true) {
     int rawDepth = analogRead(DepthSensorPin);
-    waterDepthPercentage = map(rawDepth, 0, 4095, 0, 100);
-    if (waterDepthPercentage < 0) waterDepthPercentage = 0;
+    int depthPercentage = map(rawDepth, 0, 4095, 0, 100);
+    if (depthPercentage < 0) depthPercentage = 0;
 
-    SensorInfo data;
-    data.depth = waterDepthPercentage;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(*queue, &depthPercentage, portMAX_DELAY) != pdPASS) {
       Serial.println("Depth data queue is full. Skipping...");
     }
 
-    // Cetak ke Serial Monitor
-    Serial.print("Water Depth: ");
-    Serial.print(waterDepthPercentage);
-    Serial.println(" %");
-
-    // Kirim event jika kedalaman di bawah batas
-    if (waterDepthPercentage < minWaterDepth) {
-      Blynk.logEvent("low_water_level", "Water level is too low!");
-    }
-
-    Blynk.virtualWrite(V1, waterDepthPercentage);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
+// Task untuk mengecek kejernihan air. Sensor: Turbidity Sensor
 void clarityTask(void *pvParameters) {
   QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
 
   while (true) {
     int clarityRawValue = analogRead(ClaritySensorPin);
-    waterClarityLevel = map(clarityRawValue, 0, 4095, 0, 100);
+    float clarityLevel = map(clarityRawValue, 0, 4095, 0, 100);
 
-    SensorInfo data;
-    data.clarity = waterClarityLevel;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(*queue, &clarityLevel, portMAX_DELAY) != pdPASS) {
       Serial.println("Clarity data queue is full. Skipping...");
     }
 
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+// Task untuk menangani data dari semua sensor
+void dataHandlerTask(void *pvParameters) {
+  while (true) {
+    SensorInfo data;
+
+    // Terima data dari queue dan simpan di struct
+    xQueueReceive(tempSensorQueue, &data.temperature, portMAX_DELAY);
+    xQueueReceive(depthSensorQueue, &data.depth, portMAX_DELAY);
+    xQueueReceive(claritySensorQueue, &data.clarity, portMAX_DELAY);
+
     // Cetak ke Serial Monitor
-    Serial.print("Water Clarity: ");
-    Serial.print(waterClarityLevel);
+    Serial.println("=== Sensor Data ===");
+    Serial.print("Temperature: ");
+    Serial.print(data.temperature);
+    Serial.println(" °C");
+
+    Serial.print("Water Depth: ");
+    Serial.print(data.depth);
     Serial.println(" %");
 
-    // Kirim event jika kejernihan di bawah batas
-    if (waterClarityLevel < minClarity) {
+    Serial.print("Water Clarity: ");
+    Serial.print(data.clarity);
+    Serial.println(" %");
+
+    // Kirim data ke Blynk
+    Blynk.virtualWrite(V0, data.temperature);
+    Blynk.virtualWrite(V1, data.depth);
+    Blynk.virtualWrite(V2, data.clarity);
+
+    // Kirim event jika melampaui batas
+    if (data.temperature > maxTemperature) {
+      Blynk.logEvent("high_temp", "Water temperature is too high!");
+    }
+    if (data.depth < minWaterDepth) {
+      Blynk.logEvent("low_water_level", "Water level is too low!");
+    }
+    if (data.clarity < minClarity) {
       Blynk.logEvent("low_clarity", "Water clarity is too low!");
     }
 
-    Blynk.virtualWrite(V2, waterClarityLevel);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
 void setup() {
+  tempSensor.begin();
   Serial.begin(115200);
-  initializeWiFi();
+  //initializeWiFi();
   Blynk.begin(auth, wifiSSID, wifiPass);
 
   pinMode(IndicatorLEDPin, OUTPUT);
-  tempSensor.begin();
 
-  tempSensorQueue = xQueueCreate(10, sizeof(SensorInfo));
-  depthSensorQueue = xQueueCreate(10, sizeof(SensorInfo));
-  claritySensorQueue = xQueueCreate(10, sizeof(SensorInfo));
+  tempSensorQueue = xQueueCreate(10, sizeof(float));
+  depthSensorQueue = xQueueCreate(10, sizeof(int));
+  claritySensorQueue = xQueueCreate(10, sizeof(float));
 
   tempSemaphore = xSemaphoreCreateMutex();
   depthSemaphore = xSemaphoreCreateMutex();
@@ -234,6 +238,15 @@ void setup() {
       (void *)&claritySensorQueue,
       2,
       &TaskHandleClarity,
+      0);
+
+  xTaskCreatePinnedToCore(
+      dataHandlerTask,
+      "DataHandlerTask",
+      10000,
+      NULL,
+      2,
+      &TaskHandleDataHandler,
       0);
 }
 
