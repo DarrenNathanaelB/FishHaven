@@ -74,11 +74,11 @@ During the testing phase of FishHaven, the primary focus was on establishing rel
 
 The next phase of testing involved assessing Wi-Fi connectivity and Blynk integration. This included a thorough evaluation of the Wi-Fi connection, with particular attention to stability and signal strength indicators. Simultaneously, the Blynk platform's integration was tested to ensure smooth interaction for remote monitoring and control. Success was measured through the functionality of the Blynk app interface and verification of log data, captured through screenshots and visuals. These results confirmed that the system could reliably transmit sensor data and deliver a user-friendly experience, establishing a solid foundation for further development.
 
-However, during testing, an issue was identified with the temperature sensor (DS18B20). The sensor failed to detect water temperature correctly, consistently returning a reading of -127°C. This discrepancy suggests a possible defect in the sensor hardware. However, simulations conducted using the Wokwi platform indicated that the sensor was functioning as expected, pointing to a potential hardware malfunction in the physical setup. This finding highlights the importance of rigorous testing in identifying and resolving issues to ensure the system’s reliability and performance.
+However, during testing, an issue was identified with the temperature sensor (DS18B20). The sensor failed to detect water temperature correctly, consistently returning a reading of -127°C. This discrepancy suggests a possible defect in the sensor hardware. However, simulations conducted using the Wokwi platform indicated that the sensor was functioning as expected, pointing to a potential hardware malfunction in the physical setup. This finding highlights the importance of rigorous testing in identifying and resolving issues to ensure the system’s reliability and performance. This issue has been resolved, though sometimes it will return to only displaying -127°C.
 
 ## Serial Monitor
 
-<img height="300" alt="Serial Monitor" src="https://github.com/DarrenNathanaelB/FishHaven/blob/main/Images/Serial%20Monitor.png?raw=true">
+<img height="300" alt="Serial Monitor" src="https://github.com/DarrenNathanaelB/FishHaven/blob/main/Images/Serial%20Monitor.jpg?raw=true">
 
 ## Blynk
 
