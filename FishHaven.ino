@@ -1,6 +1,6 @@
-#define BLYNK_TEMPLATE_ID "TMPL69z-Bi-_s"
-#define BLYNK_TEMPLATE_NAME "FishHaven"
-#define BLYNK_AUTH_TOKEN "ey98oPBczRbNhUEDfUveEWVp-3tMvrTq"
+#define BLYNK_TEMPLATE_ID "TMPL6gReiJnjU"
+#define BLYNK_TEMPLATE_NAME "finpro iot"
+#define BLYNK_AUTH_TOKEN "FMuCkehAhh4ZO-QBBDshlhnxw90xNTN5"
 
 #define BLYNK_PRINT Serial
 
@@ -14,6 +14,7 @@
 TaskHandle_t TaskHandleTemperature;
 TaskHandle_t TaskHandleDepth;
 TaskHandle_t TaskHandleClarity;
+TaskHandle_t TaskHandleDataHandler;
 
 // Queue untuk data sensor
 QueueHandle_t tempSensorQueue;
@@ -24,22 +25,27 @@ QueueHandle_t claritySensorQueue;
 SemaphoreHandle_t tempSemaphore;
 SemaphoreHandle_t depthSemaphore;
 SemaphoreHandle_t claritySemaphore;
-SemaphoreHandle_t resourceMutex;
+SemaphoreHandle_t arbitrator; // Semaphore untuk pengaturan akses bersama
 
 // Informasi koneksi WiFi dan Blynk
 char auth[] = BLYNK_AUTH_TOKEN;
-const char *wifiSSID = "Wokwi-GUEST";
-const char *wifiPass = "";
+const char *wifiSSID = "Darren Iphone";
+const char *wifiPass = "darrennath30";
 
-const int TempSensorPin = 18;
-//const int DepthSensorPin = 34;
-//const int ClaritySensorPin = 35;
+// Konfigurasi pin
+const int TempSensorPin = 32;
+const int DepthSensorPin = 34;
+const int ClaritySensorPin = 35;
 const int IndicatorLEDPin = 5;
 
 // Variabel untuk menyimpan nilai sensor
 float waterTemperature = 0.0;
-int waterDepthPercentage = 75;
-float waterClarityLevel = 20;
+int waterDepthPercentage = 0;
+float waterClarityLevel = 0.0;
+
+float maxTemperature = 30.0; // Batas suhu
+int minWaterDepth = 20;      // Batas kedalaman
+float minClarity = 50.0;     // Batas kejernihan
 
 // Struktur untuk data sensor
 struct SensorInfo {
@@ -75,111 +81,150 @@ BLYNK_WRITE(V3) {
   }
 }
 
+// Fungsi untuk mengatur batas suhu
+BLYNK_WRITE(V4) {
+  maxTemperature = param.asFloat();
+  Serial.print("Updated Max Temperature: ");
+  Serial.println(maxTemperature);
+}
+
+// Fungsi untuk mengatur batas kedalaman 
+BLYNK_WRITE(V5) {
+  minWaterDepth = param.asInt(); 
+  Serial.print("Updated Min Water Depth: ");
+  Serial.println(minWaterDepth);
+}
+
+// Fungsi untuk mengatur batas kejernihan 
+BLYNK_WRITE(V6) {
+  minClarity = param.asFloat(); 
+  Serial.print("Updated Min Clarity: ");
+  Serial.println(minClarity);
+}
+
+// Fungsi untuk mengakses data menggunakan semaphore
+bool accessSensorData(SemaphoreHandle_t semaphore, QueueHandle_t queue, void *data) {
+  if (xSemaphoreTake(arbitrator, portMAX_DELAY)) {
+    if (xSemaphoreTake(semaphore, portMAX_DELAY)) {
+      if (xQueueReceive(queue, data, 0) == pdPASS) {
+        xSemaphoreGive(semaphore);
+        xSemaphoreGive(arbitrator);
+        return true; // Data berhasil diambil
+      }
+      xSemaphoreGive(semaphore);
+    }
+    xSemaphoreGive(arbitrator);
+  }
+  return false; // Gagal mengakses data
+}
+
 // Task untuk membaca suhu air
 void temperatureTask(void *pvParameters) {
-  QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
-
   while (true) {
     tempSensor.requestTemperatures();
-    delay(100);
+    vTaskDelay(100);
     float currentTemperature = tempSensor.getTempCByIndex(0);
 
-    SensorInfo data;
-    data.temperature = currentTemperature;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(tempSensorQueue, &currentTemperature, portMAX_DELAY) != pdPASS) {
       Serial.println("Temperature data queue is full. Skipping...");
     }
 
-    Blynk.virtualWrite(V0, currentTemperature);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
-// Task untuk membaca kedalaman air
+// Task untuk mengecek kedalaman air
 void depthTask(void *pvParameters) {
-  QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
-
   while (true) {
-    //int rawDepth = analogRead(DepthSensorPin);
-    //waterDepthPercentage = map(rawDepth, 1500, 4095, 0, 100);
-    //if (waterDepthPercentage < 0) waterDepthPercentage = 0;
+    int rawDepth = analogRead(DepthSensorPin);
+    int depthPercentage = map(rawDepth, 0, 4095, 0, 100);
+    if (depthPercentage < 0) depthPercentage = 0;
 
-    SensorInfo data;
-    data.depth = waterDepthPercentage;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(depthSensorQueue, &depthPercentage, portMAX_DELAY) != pdPASS) {
       Serial.println("Depth data queue is full. Skipping...");
     }
 
-    Blynk.virtualWrite(V1, waterDepthPercentage);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
-// Task untuk membaca tingkat kekeruhan air
+// Task untuk mengecek kejernihan air
 void clarityTask(void *pvParameters) {
-  QueueHandle_t *queue = (QueueHandle_t *)pvParameters;
-
   while (true) {
-    //int clarityRawValue = analogRead(ClaritySensorPin);
-    //waterClarityLevel = clarityRawValue;
+    int clarityRawValue = analogRead(ClaritySensorPin);
+    float clarityLevel = (float)clarityRawValue / 4095.0 * 100.0;
 
-    SensorInfo data;
-    data.clarity = waterClarityLevel;
-
-    if (xQueueSend(*queue, &data, portMAX_DELAY) != pdPASS) {
+    if (xQueueSend(claritySensorQueue, &clarityLevel, portMAX_DELAY) != pdPASS) {
       Serial.println("Clarity data queue is full. Skipping...");
     }
 
-    Blynk.virtualWrite(V2, waterClarityLevel);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
+
+// Task untuk menangani data dari semua sensor
+void dataHandlerTask(void *pvParameters) {
+  SensorInfo data;
+
+  while (true) {
+    bool tempDataAvailable = accessSensorData(tempSemaphore, tempSensorQueue, &data.temperature);
+    bool depthDataAvailable = accessSensorData(depthSemaphore, depthSensorQueue, &data.depth);
+    bool clarityDataAvailable = accessSensorData(claritySemaphore, claritySensorQueue, &data.clarity);
+
+    if (tempDataAvailable && depthDataAvailable && clarityDataAvailable) {
+      Serial.println("=== Sensor Data ===");
+      Serial.print("Temperature: ");
+      Serial.print(data.temperature);
+      Serial.println(" °C");
+
+      Serial.print("Water Depth: ");
+      Serial.print(data.depth);
+      Serial.println(" %");
+
+      Serial.print("Water Clarity: ");
+      Serial.print(data.clarity);
+      Serial.println(" %");
+
+      Blynk.virtualWrite(V0, data.temperature);
+      Blynk.virtualWrite(V1, data.depth);
+      Blynk.virtualWrite(V2, data.clarity);
+
+      if (data.temperature > maxTemperature) {
+        Blynk.logEvent("high_temp", "Water temperature is too high!");
+      }
+      if (data.depth < minWaterDepth) {
+        Blynk.logEvent("low_water_level", "Water level is too low!");
+      }
+      if (data.clarity < minClarity) {
+        Blynk.logEvent("low_clarity", "Water clarity is too low!");
+      }
+    }
+
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
 void setup() {
+  tempSensor.begin();
   Serial.begin(115200);
   initializeWiFi();
   Blynk.begin(auth, wifiSSID, wifiPass);
 
   pinMode(IndicatorLEDPin, OUTPUT);
-  tempSensor.begin();
 
-  tempSensorQueue = xQueueCreate(10, sizeof(SensorInfo));
-  depthSensorQueue = xQueueCreate(10, sizeof(SensorInfo));
-  claritySensorQueue = xQueueCreate(10, sizeof(SensorInfo));
+  tempSensorQueue = xQueueCreate(10, sizeof(float));
+  depthSensorQueue = xQueueCreate(10, sizeof(int));
+  claritySensorQueue = xQueueCreate(10, sizeof(float));
 
   tempSemaphore = xSemaphoreCreateMutex();
   depthSemaphore = xSemaphoreCreateMutex();
   claritySemaphore = xSemaphoreCreateMutex();
-  resourceMutex = xSemaphoreCreateMutex();
+  arbitrator = xSemaphoreCreateMutex();
 
-  xTaskCreatePinnedToCore(
-      temperatureTask,
-      "TemperatureTask",
-      10000,
-      (void *)&tempSensorQueue,
-      2,
-      &TaskHandleTemperature,
-      1);
-
-  xTaskCreatePinnedToCore(
-      depthTask,
-      "DepthTask",
-      10000,
-      (void *)&depthSensorQueue,
-      1,
-      &TaskHandleDepth,
-      1);
-
-  xTaskCreatePinnedToCore(
-      clarityTask,
-      "ClarityTask",
-      10000,
-      (void *)&claritySensorQueue,
-      2,
-      &TaskHandleClarity,
-      0);
+  xTaskCreatePinnedToCore(temperatureTask, "TemperatureTask", 10000, NULL, 1, &TaskHandleTemperature, 1);
+  xTaskCreatePinnedToCore(depthTask, "DepthTask", 10000, NULL, 1, &TaskHandleDepth, 1);
+  xTaskCreatePinnedToCore(clarityTask, "ClarityTask", 10000, NULL, 1, &TaskHandleClarity, 0);
+  xTaskCreatePinnedToCore(dataHandlerTask, "DataHandlerTask", 10000, NULL, 1, &TaskHandleDataHandler, 0);
 }
 
 void loop() {
