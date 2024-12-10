@@ -1,4 +1,3 @@
-![image](https://github.com/user-attachments/assets/d627c723-367b-4ade-89d0-29ef70379c18)<br />
 <div align="center">
   <h1 align="center">FishHaven: Smart IoT Monitoring System for Fish Farming</h1>
 </div>
