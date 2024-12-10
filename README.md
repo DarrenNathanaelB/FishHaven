@@ -1,4 +1,4 @@
-<br />
+![image](https://github.com/user-attachments/assets/d627c723-367b-4ade-89d0-29ef70379c18)<br />
 <div align="center">
   <h1 align="center">FishHaven: Smart IoT Monitoring System for Fish Farming</h1>
 </div>
@@ -38,7 +38,7 @@ This is a final Internet of Things project made by Group 23:
 
 ## Schematic
 
-<img width="7634" alt="Diagram & Goals " src="https://github.com/DarrenNathanaelB/FishHaven/blob/main/Images/Diagram-Goals.png?raw=true">
+<img width="7634" alt="Diagram & Goals " src="https://github.com/DarrenNathanaelB/FishHaven/blob/main/Images/Schematics.jpg?raw=true">
 
 This Project is built using the following technologies:
 
