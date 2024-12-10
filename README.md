@@ -60,6 +60,10 @@ Additionally, the Turbidity Sensor Module (AB147) evaluates water clarity, enabl
 
 # III. Software Implementation Details
 
+## Diagram-Goals
+
+<img width="7634" alt="Diagram & Goals " src="https://github.com/DarrenNathanaelB/FishHaven/blob/main/Images/Diagram-Goals.png?raw=true">
+
 The FishHaven project integrates cutting-edge hardware and software to create a comprehensive smart aquaculture management system. At its core, the ESP32 microcontroller processes data from various sensors and facilitates seamless communication with the Blynk app, which enables users to monitor and control the system remotely. Upon powering up, the system establishes a Wi-Fi connection and connects to the Blynk server using the necessary authentication token. Once connected, it allows users to view real-time data and manage aquaculture operations through an intuitive mobile interface.
 
 The system uses a range of sensors, each tasked with monitoring critical aspects of the aquaculture environment. The Dallas Temperature Sensor (DS18B20) plays a crucial role by ensuring precise monitoring of water temperature. Maintaining an optimal temperature is vital for the health and growth of the fish, and this sensor continuously measures water temperature, providing real-time updates. The Turbidity Sensor Module (AB147) is another key component, monitoring the clarity of the water. It detects changes in water quality, which can indicate issues such as contamination, algae blooms, or waste buildup, helping prevent harm to the aquatic life. Additionally, the Water Level Sensor Universal ensures stable water levels, allowing the system to track and maintain the ideal volume for fish farming.
